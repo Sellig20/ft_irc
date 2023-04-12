@@ -16,6 +16,31 @@ class Parser
 
         ~Parser();
 
+        class WrongPasswordException : public std::exception
+        {
+            public :
+                const char *what() const throw()
+                {
+                   return ("Wrong password... Try again ?");
+                }
+        };
+        class ChannelDoesNotExistException : public std::exception
+        {
+            public :
+                const char *what() const throw()
+                {
+                   return ("No such channel");
+                }
+        };
+        class UserDoesNotExistException : public std::exception
+        {
+            public :
+                const char *what() const throw()
+                {
+                   return ("No such user");
+                }
+        };
+
         void    check_for_cmd();
         void    tokenizer();
         void    execute()
@@ -24,18 +49,39 @@ class Parser
                 privmsg();
             else if (_cmd.compare("JOIN") == 0)
                 join();
+            else if (_cmd.compare("AUTHENTICATE") == 0)
+                authenticate();
+            else if (_cmd.compare("PASS") == 0)
+                pass();
+            else if (_cmd.compare("NICK") == 0)
+                nick();
+            else if (_cmd.compare("USER") == 0)
+                user();
+            else if (_cmd.compare("PING") == 0)
+                ping();
+            else if (_cmd.compare("PONG") == 0)
+                pong();
+            else if (_cmd.compare("OPER") == 0)
+                oper();
+            else if (_cmd.compare("QUIT") == 0)
+                quit();
+            else if (_cmd.compare("ERROR") == 0)
+                error();
         }
 
-        //connection operation
+        //CONNECTION OPERATION
         void    authenticate()
         {
+            //add to be member of User
         }
         void    pass()
         {
             if (!_cmd.compare(_pass))
+            {
                 //they can go on with authentication
-            else 
-                //exception wrong password
+            }
+            else
+                throw WrongPasswordException();
         }
         void    nick()
         {
@@ -48,8 +94,7 @@ class Parser
             _user->_realname = _param[3];
         }
 
-        void    ping(){
-        }
+        void    ping(){}
         void    pong(){}
         void    oper(){}
         void    quit(){}
@@ -57,19 +102,16 @@ class Parser
         {
             //send the _error to the client
         }
-        //channel operarion
+
+        //CHANNEL OPERATION
         void    part()
-        {
-        }
+        {}
 
         void    topic()
-        {
+        {}
 
-        }
         void    names()
-        {
-
-        }
+        {}
 
         void    list()
         {}
@@ -78,7 +120,18 @@ class Parser
         {}
 
         void    kick()
-        {}
+        {
+            std::string channelName;
+            std::string userToKick;
+
+            if (!_tree->get_channel().find(_param[0]))
+                throw ChannelDoesNotExistException();
+            if (!_user)
+                throw UserDoesNotExistException();
+            
+            
+
+        }
         //in the commands you will mostly use find, erase, insert functions of map to execute
         void    join()
         {
@@ -91,14 +144,16 @@ class Parser
                     it->second.add_member(*_user);//??ask aguillar
                     //1.send a JOIN message to the client
                     if (it->second.get_topic() != "")
+                    {
                         //send the channel topic to the client
+                    }
                     //3.call the name command : name();
                 }
                 else
                     //user is banned exception
             }
             else
-                //errror exception channel doesnt exist
+                throw ChannelDoesNotExistException();
 
         }
         void    privmsg()
