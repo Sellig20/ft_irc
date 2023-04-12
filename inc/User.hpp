@@ -21,7 +21,7 @@ class User
         ~User();
 
         void    erase_me_from_allchannel()
-        {
+        {//send a message to all member of the channel that the user quits
             for (int i = 0; i < _channels.size(); ++i)
                 _channels[i]->erase_user(*this);
         }

@@ -40,6 +40,14 @@ class Parser
                    return ("No such user");
                 }
         };
+        class CannotBeKickedException : public std::exception
+        {
+            public :
+                const char *what() const throw()
+                {
+                   return ("No such user");
+                }
+        };
 
         void    check_for_cmd();
         void    tokenizer();
@@ -49,8 +57,6 @@ class Parser
                 privmsg();
             else if (_cmd.compare("JOIN") == 0)
                 join();
-            else if (_cmd.compare("AUTHENTICATE") == 0)
-                authenticate();
             else if (_cmd.compare("PASS") == 0)
                 pass();
             else if (_cmd.compare("NICK") == 0)
@@ -69,11 +75,7 @@ class Parser
                 error();
         }
 
-        //CONNECTION OPERATION
-        void    authenticate()
-        {
-            //add to be member of User
-        }
+        //CONNECTION OPERATIO
         void    pass()
         {
             if (!_cmd.compare(_pass))
@@ -97,7 +99,12 @@ class Parser
         void    ping(){}
         void    pong(){}
         void    oper(){}
-        void    quit(){}
+        void    quit()
+        {
+            _user->erase_me_from_allchannel();
+            _tree->erase_user(_user);
+        }
+
         void    error(std::string  _error)
         {
             //send the _error to the client
@@ -108,35 +115,64 @@ class Parser
         {}
 
         void    topic()
-        {}
+        {
+            std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
 
-        void    names()
-        {}
+            if (it != _tree->get_channel().find(_param[0]))
+            {
+                it->second.get_topic() = _param[1];
+                //send a topic message to alll the members of the channel
+            }
+            else
+                //error channel doont exist
 
-        void    list()
-        {}
+        }
 
         void    invite()
-        {}
+        {
+            std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
+            if (it != _tree->get_channel().end())
+            {
+                if (it->second.size() < 1)
+                    _user->_fd >> "INVITE: error: empty channel\n";
+                else if (it->second.is_member(_param[0]))
+                    _user->_fd >> "INVITE: error: you are already in the channel !\n";
+                else
+                {
+                    it->second.add_member(_tree->find_usr_by_nickname(_param[0]));
+                    //send a success msg to the user
+                }
+            }
+            else
+                //channel does not exist error
+        }
 
         void    kick()
         {
             std::string channelName;
             std::string userToKick;
-
-            if (!_tree->get_channel().find(_param[0]))
-                throw ChannelDoesNotExistException();
-            if (!_user)
-                throw UserDoesNotExistException();
-            
-            
-
+            std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
+            if (_param[0] == "" || _param[1] == "")
+            {
+                //throw exception mmissing pe arg for kick
+            }
+            else if (it == _tree->get_channel().end())
+                throw ChannelDoesNotExistException();//change with the fd
+            else if (it != _tree->get_channel().end())
+            {
+                if (it->second.is_member(_param[1]))
+                    it->second.erase_user(_tree->find_usr_by_nickname(_param[1]));
+                else if (it->second.is_oper(_param[1]))
+                    _user->_fd >> "User cannot be kicked because he is an administrator !";//to write in the wbuffer / fd of the client who asked to kick
+                else
+                    throw UserDoesNotExistException(); //change with the fd
+            }
         }
         //in the commands you will mostly use find, erase, insert functions of map to execute
         void    join()
         {
             std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
-            if (it != _tree->get_channel().end()) 
+            if (it != _tree->get_channel().end())
             {
                 if (!it->second.is_ban(_user->_nickname))
                 {
@@ -145,7 +181,7 @@ class Parser
                     //1.send a JOIN message to the client
                     if (it->second.get_topic() != "")
                     {
-                        //send the channel topic to the client
+                        //send a message to the client fd with the topic of the channel he joined
                     }
                     //3.call the name command : name();
                 }
@@ -158,10 +194,10 @@ class Parser
         }
         void    privmsg()
         {
-            if (_tree->get_channel().find(_param[0]) != _tree->get_channel().end()) 
+            if (_tree->get_channel().find(_param[0]) != _tree->get_channel().end())
             {
                 //send msg to channel //check if the sender/user has permission to write in THAT channel, if not ERROR CANNOT SENDTO CHAN
-            }   
+            }
             else if (_param[0].compare(_user->_nickname) == 0)
             {
                 //send msg to the user
