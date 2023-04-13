@@ -11,7 +11,7 @@ class User
         std::string                 _username;
         std::string                 _wbuff;
         std::string                 _rbuff;
-        int                         _regstat;
+        int                         _regstat;//0 = next command must be pass // 1 next command NICK // 2 mus be USER// 3 next command cannot be pass nick or user
         int                         _fd;
         bool                        _opstat;
         std::vector<Channel*>       _channels;

@@ -16,39 +16,6 @@ class Parser
 
         ~Parser();
 
-        class WrongPasswordException : public std::exception
-        {
-            public :
-                const char *what() const throw()
-                {
-                   return ("Wrong password... Try again ?");
-                }
-        };
-        class ChannelDoesNotExistException : public std::exception
-        {
-            public :
-                const char *what() const throw()
-                {
-                   return ("No such channel");
-                }
-        };
-        class UserDoesNotExistException : public std::exception
-        {
-            public :
-                const char *what() const throw()
-                {
-                   return ("No such user");
-                }
-        };
-        class CannotBeKickedException : public std::exception
-        {
-            public :
-                const char *what() const throw()
-                {
-                   return ("No such user");
-                }
-        };
-
         void    check_for_cmd();
         void    tokenizer();
         void    execute()
@@ -134,7 +101,7 @@ class Parser
             if (it != _tree->get_channel().end())
             {
                 if (it->second.size() < 1)
-                    _user->_fd >> "INVITE: error: empty channel\n";
+                    (*_user)._wbuff.append("INVITE: error: empty channel\n");
                 else if (it->second.is_member(_param[0]))
                     _user->_fd >> "INVITE: error: you are already in the channel !\n";
                 else
@@ -224,3 +191,27 @@ class Parser
 
 };
 #endif
+
+
+
+
+
+/*
+
+1. check for \r\n
+2. take evrything before and extract if, memmove, if empty return
+3. split by ws
+4. fill in the fields (cmd + args)
+5. do reg status check at 3
+6. if cmd doest exist error
+7. switch commands
+    1. Pass, if no arg error, if wrong arg error, if right arg reg status +1
+    2. nick, if no arg error, if non compliant error, if already a nick or channel name, error, else 1. put im _nickname 2. map. modify nickname 3. regstat+1
+    3. user, idem, idem, else 1. update fields 2. regstat+1
+    4. privmsg, if no target error, if non existing target error, else send to user / channel
+    5. join, check if channel exist, check if not ban,
+
+    ...
+    x. quit, send quit msg to all member channel, remove user from tree, return
+
+*/
