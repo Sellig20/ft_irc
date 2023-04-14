@@ -20,29 +20,44 @@ class Parser
         void    tokenizer();
         void    execute()
         {
-            if (_cmd.compare("PRIVMSG") == 0)
-                privmsg();
-            else if (_cmd.compare("JOIN") == 0)
-                join();
+            if (_cmd.compare("CAP") == 0)
+                cap();
             else if (_cmd.compare("PASS") == 0)
                 pass();
             else if (_cmd.compare("NICK") == 0)
                 nick();
-            else if (_cmd.compare("USER") == 0)
+            else if (_cmd.compare("PRIVMSG") == 0)
                 user();
             else if (_cmd.compare("PING") == 0)
                 ping();
             else if (_cmd.compare("PONG") == 0)
                 pong();
-            else if (_cmd.compare("OPER") == 0)
-                oper();
+            else if (_cmd.compare("USER") == 0)
+                user();
             else if (_cmd.compare("QUIT") == 0)
                 quit();
-            else if (_cmd.compare("ERROR") == 0)
-                error();
+            else if (_cmd.compare("PART") == 0)
+                part();
+            else if (_cmd.compare("TOPIC") == 0)
+                topic();
+            else if (_cmd.compare("INVITE") == 0)
+                invite();
+            else if (_cmd.compare("KICK") == 0)
+                kick();
+            else if (_cmd.compare("JOIN") == 0)
+                join();
+            else if (_cmd.compare("PRIVMSG") == 0)
+                privmsg();
+            else if (_cmd.compare("NOTICE") == 0)
+                notice();
         }
 
-        //CONNECTION OPERATIO
+        //CONNECTION OPERATION
+        void    cap()
+        {
+            return ;
+        }
+
         void    pass()
         {
             if (!_cmd.compare(_pass))
@@ -50,7 +65,7 @@ class Parser
                 //they can go on with authentication
             }
             else
-                throw WrongPasswordException();
+                _user->_fd << "PASS: error: wrong password, try again !\n";
         }
         void    nick()
         {
@@ -63,55 +78,88 @@ class Parser
             _user->_realname = _param[3];
         }
 
-        void    ping(){}
-        void    pong(){}
-        void    oper(){}
+        void    ping()
+        {
+            if (_param[0] == "")
+            {
+                _user->_fd << "PING: error: wrong parameter\n";
+            }
+            else
+                _user->_fd << "PING\n";
+        }
+
+        void    pong()
+        {
+            if (_param[0] == "")
+            {
+                _user->_fd << "PONG: error: wrong parameter\n";
+            }
+            else
+                _user->_fd << "PING\n";
+        }
+
+        void    oper()
+        {
+
+        }
+
         void    quit()
         {
             _user->erase_me_from_allchannel();
             _tree->erase_user(_user);
         }
 
-        void    error(std::string  _error)
-        {
-            //send the _error to the client
-        }
-
         //CHANNEL OPERATION
         void    part()
-        {}
+        {
+            if (_param[0] == "" || _param[1] == "")
+            {
+                _user->_fd << "KICK: error: wrong parameters\n";
+            }
+        }
 
         void    topic()
         {
             std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
-
+            if (_param[0] == "")
+            {
+                _user->_fd << "KICK: error: wrong parameter\n";
+            }
             if (it != _tree->get_channel().find(_param[0]))
             {
                 it->second.get_topic() = _param[1];
                 //send a topic message to alll the members of the channel
+                for (it; it != _user->_nickname.find().end())
+                {
+                    _user->_fd << "topic of the channe is " << _tree->get_channel();
+                }
             }
             else
-                //error channel doont exist
+                _user->_fd << "TOPIC: error: channel does not exist\n";
 
         }
 
         void    invite()
         {
             std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
+            if (_param[0] == "" || _param[1] == "")
+            {
+                _user->_fd << "KICK: error: wrong parameters\n";
+            }
             if (it != _tree->get_channel().end())
             {
                 if (it->second.size() < 1)
                     (*_user)._wbuff.append("INVITE: error: empty channel\n");
                 else if (it->second.is_member(_param[0]))
-                    _user->_fd >> "INVITE: error: you are already in the channel !\n";
+                    _user->_fd << "INVITE: error: you are already in the channel !\n";
                 else
                 {
                     it->second.add_member(_tree->find_usr_by_nickname(_param[0]));
-                    //send a success msg to the user
+                    _user->_fd << _user->_nickname << "'ve been successfully added to" << _tree->get_channel();
                 }
             }
             else
-                //channel does not exist error
+                _user->_fd << "INVITE: error: channel does not exist\n"
         }
 
         void    kick()
@@ -121,46 +169,54 @@ class Parser
             std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
             if (_param[0] == "" || _param[1] == "")
             {
-                //throw exception mmissing pe arg for kick
+                _user->_fd << "KICK: error: wrong parameters\n";
             }
             else if (it == _tree->get_channel().end())
-                throw ChannelDoesNotExistException();//change with the fd
+                _user->_fd << "KICK: error: channel does not exist\n";
             else if (it != _tree->get_channel().end())
             {
                 if (it->second.is_member(_param[1]))
                     it->second.erase_user(_tree->find_usr_by_nickname(_param[1]));
                 else if (it->second.is_oper(_param[1]))
-                    _user->_fd >> "User cannot be kicked because he is an administrator !";//to write in the wbuffer / fd of the client who asked to kick
+                    _user->_fd << "User cannot be kicked because he is an administrator !";
                 else
-                    throw UserDoesNotExistException(); //change with the fd
+                    _user->_fd << "KICK: error: user does not exist\n"
             }
         }
-        //in the commands you will mostly use find, erase, insert functions of map to execute
         void    join()
         {
             std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
+            if (_param[0] == "" || _param[1] == "")
+            {
+                _user->_fd << "KICK: error: wrong parameters\n";
+            }
             if (it != _tree->get_channel().end())
             {
                 if (!it->second.is_ban(_user->_nickname))
                 {
                     //discuss what we need to do with the keys
                     it->second.add_member(*_user);//??ask aguillar
-                    //1.send a JOIN message to the client
+                    _user->_fd << "you've joined the channel " << _tree->get_channel();
                     if (it->second.get_topic() != "")
                     {
-                        //send a message to the client fd with the topic of the channel he joined
+                        _user->_fd << "topic of the channel is : " << _tree->get_channel();
                     }
                     //3.call the name command : name();
-                }
+                }privmsg
                 else
-                    //user is banned exception
+                    _user->_fd << "INVITE: error: channel does not exist\n"
             }
             else
-                throw ChannelDoesNotExistException();
+                _user->_fd << "INVITE: error: "<< _user->_nickname << "is banned\n";
 
         }
+
         void    privmsg()
         {
+            if (_param[0] == "" || _param[1] == "")
+            {
+                _user->_fd << "KICK: error: wrong parameters\n";
+            }
             if (_tree->get_channel().find(_param[0]) != _tree->get_channel().end())
             {
                 //send msg to channel //check if the sender/user has permission to write in THAT channel, if not ERROR CANNOT SENDTO CHAN
@@ -168,15 +224,31 @@ class Parser
             else if (_param[0].compare(_user->_nickname) == 0)
             {
                 //send msg to the user
-
             }
             else
             {
-                //error for NO chan and NO user
-                //exception
+                _user->_fd << "PRIVMSG: error: impossible to send your message\n";
             }
         }
-        void    notice();
+        void    notice()
+        {
+            if (_param[0] == "" || _param[1] == "")
+            {
+                _user->_fd << "KICK: error: wrong parameters\n";
+            }
+            if (_tree->get_channel().find(_param[0]) != _tree->get_channel().end())
+            {
+                //send msg to channel //check if the sender/user has permission to write in THAT channel, if not ERROR CANNOT SENDTO CHAN
+            }
+            else if (_param[0].compare(_user->_nickname) == 0)
+            {
+                //send msg to the user
+            }
+            else
+            {
+                _user->_fd << "PRIVMSG: error: impossible to send your message\n";
+            }
+        }
 
 
     private:
@@ -184,17 +256,10 @@ class Parser
         std::string     _param[3];
         User            *_user;
         Tree            *_tree;
-        std::string     _pass;//discuss later
-
-
-
+        std::string     _pass;//discuss late
 
 };
 #endif
-
-
-
-
 
 /*
 
