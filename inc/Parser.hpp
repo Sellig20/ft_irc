@@ -130,7 +130,7 @@ class Parser
         {
             if (_param.size() )//fill in the required number
                 _user->_fd << "PING: invalid number of parameters!\n";
-            else if (_param[0] == "")
+            else if (*(_param.begin()) == "")
             {
                 _user->_fd << "PING: error: wrong parameter\n";
             }
