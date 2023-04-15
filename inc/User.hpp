@@ -10,7 +10,7 @@ class User
         std::string                 _realname;
         std::string                 _username;
         std::string                 _wbuff;
-        std::string                 _rbuff;
+        std::string                 _rbuff;//this needs to be char* for memmove
         int                         _regstat;//0 = next command must be pass // 1 next command NICK // 2 mus be USER// 3 next command cannot be pass nick or user
         int                         _fd;
         bool                        _opstat;
