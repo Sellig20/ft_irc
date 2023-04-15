@@ -142,7 +142,7 @@ class Parser
         {
             if (_param.size() )//fill in the required number
                 _user->_fd << "PONG: invalid number of parameters!\n";
-            if (_param[0] == "")
+            else if (_param.begin() == "")
             {
                 _user->_fd << "PONG: error: wrong parameter\n";
             }
@@ -291,7 +291,7 @@ class Parser
             {
                 _user->_fd << "PRIVMSG: error: wrong parameters\n";
             }
-            if (_tree->get_channel().find(_param[0]) != _tree->get_channel().end())
+            else if (_tree->get_channel().find(_param[0]) != _tree->get_channel().end())
             {
                 //send msg to channel //check if the sender/user has permission to write in THAT channel, if not ERROR CANNOT SENDTO CHAN
             }
@@ -312,7 +312,7 @@ class Parser
             {
                 _user->_fd << "NOTICE: error: wrong parameters\n";
             }
-            if (_tree->get_channel().find(_param[0]) != _tree->get_channel().end())
+            else if (_tree->get_channel().find(_param[0]) != _tree->get_channel().end())
             {
                 //send msg to channel //check if the sender/user has permission to write in THAT channel, if not ERROR CANNOT SENDTO CHAN
             }
