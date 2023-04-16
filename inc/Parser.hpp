@@ -10,11 +10,14 @@ class Parser
         {
             _tree = &tree;
             _cmd = "";
-            _param = NULL;
             _user = NULL;
         }
 
-        ~Parser();
+        ~Parser()
+        {
+            delete _user;
+            delete _tree;
+        }
 
         int    check_for_cmd()
         {
@@ -32,28 +35,26 @@ class Parser
                 return 1;
             }
             pos = buf.find_first_of(sep , 0);
-            buf.copy(_user->_rbuff, pos, 0);
+            buf.copy(static_cast<char*>(_user->_rbuff), pos, 0);
             fill_in_params(buf, pos);
             return 0;
         }
 
         void    fill_in_params(std::string  buf, int pos)
         {
-            std::vector<std::string> output;
             std::string::size_type prev_pos = 0, pos = 0;
 
             while((pos = buf.find(32 , pos)) != std::string::npos || (pos = buf.find(9, pos)) != std::string::npos)
             {
-                std::string substring( s.substr(prev_pos, pos-prev_pos) );
+                std::string substring( buf.substr(prev_pos, pos-prev_pos) );
 
-                output.push_back(substring);
+                _param.push_back(substring);
                 prev_pos = ++pos;
             }
-            output.push_back(s.substr(prev_pos, pos-prev_pos)); // Last word
+            _param.push_back(buf.substr(prev_pos, pos-prev_pos)); // Last word
 
-            _cmd = *(output.begin());
-            output.erase(output.begin());
-            output = _param;
+            _cmd = *(_param.begin());
+            _param.erase(_param.begin());
         }
 
         void    execute()
@@ -89,38 +90,47 @@ class Parser
             else if (_cmd.compare("NOTICE") == 0)
                 notice();
             else
-                //no such command
+                _user->_fd << "Error: No such command\n";
         }
 
-        //CONNECTION OPERATION
-        void    cap()
+        void    cap()//DO WE KEEP IT ?
         {
-            return ;
+            return ;//we have nothung to do here
         }
 
         void    pass()
         {
-            if (!_cmd.compare(_pass))
-            {
-                //they can go on with authentication
-            }
+            if (_user->_regstat > 1)
+                _user->_fd << "PASS: error: user is already connected\n";
+            else if (!_cmd.compare(_pass))
+                _user->_regstat = 1;
             else
                 _user->_fd << "PASS: error: wrong password, try again !\n";
         }
         void    nick()
         {
-            if (_param.size() )//fill in the required number
-                _user->_fd << "NICK: invalid number of parameters!\n";
+            if (_param.size() != 1)
+                _user->_fd << "NICK: error: invalid number of parameters!\n";
+            else if (_user->_regstat != 1)
+                _user->_fd << "NICK: error: user is not registered\n";
+            else if (_tree->get_usernick().find(*(_param.begin())) != _tree->get_usernick().end())
+                _user->_fd << "NICK: error: nickname is already in use choose a different one\n";
             else
-                _user->_nickname = _param[0];
+            {
+                _user->_regstat = 2;
+                _user->_nickname = _param.begin();
+            }
         }
 
         void    user()
         {
-            if (_param.size() )//fill in the required number
-                _user->_fd << "USER: invalid number of parameters!\n";
+            if (_param.size() != 4)
+                _user->_fd << "USER: error; invalid number of parameters!\n";
+            else if (_user->_regstat != 2)
+                _user->_fd << "USER: error: user is not registered\n";
             else
             {
+                _user->_regstat = 3;
                 _user->_username = _param.begin();
                 _user->_realname = _param.begin() + 2;
             }
@@ -128,8 +138,10 @@ class Parser
 
         void    ping()
         {
-            if (_param.size() )//fill in the required number
-                _user->_fd << "PING: invalid number of parameters!\n";
+            if (_param.size() != 1)
+                _user->_fd << "PING: error : invalid number of parameters!\n";
+            else if (_user->_regstat != 3)
+                _user->_fd << "PING: error: user is not registered\n";
             else if (*(_param.begin()) == "")
             {
                 _user->_fd << "PING: error: wrong parameter\n";
@@ -140,26 +152,36 @@ class Parser
 
         void    pong()
         {
-            if (_param.size() )//fill in the required number
-                _user->_fd << "PONG: invalid number of parameters!\n";
+            if (_param.size() != 1)
+                _user->_fd << "PONG: error: invalid number of parameters!\n";
+            else if (_user->_regstat != 3)
+                _user->_fd << "PONG: error: user is not registered\n";
             else if (_param.begin() == "")
             {
                 _user->_fd << "PONG: error: wrong parameter\n";
             }
             else
-                _user->_fd << "PING\n";
+                _user->_fd << "PONG\n";
         }
 
         void    oper()
         {
-            if (_param.size() )//fill in the required number
-                _user->_fd << "OPER: invalid number of parameters!\n";
+            if (_param.size() != 2)
+                _user->_fd << "OPER: error: invalid number of parameters!\n";
+            else if (_user->_regstat != 3)
+                _user->_fd << "OPER: error: user is not registered\n";
+            else
+            {
+                //make the user admin of the channel
+            }
         }
 
         void    quit()
         {
-            if (_param.size() )//fill in the required number
-                _user->_fd << "QUIT: invalid number of parameters!\n";
+            if (_param.size() != 1)
+                _user->_fd << "QUIT: error: invalid number of parameters!\n";
+            else if (_user->_regstat != 3)
+                _user->_fd << "QUIT: error: user is not registered, register first before quitting\n";
             else
             {
                 _user->erase_me_from_allchannel();
@@ -170,11 +192,17 @@ class Parser
         //CHANNEL OPERATION
         void    part()
         {
-            if (_param.size() )//fill in the required number
+            if (_param.size() < 2)
                 _user->_fd << "PART: invalid number of parameters!\n";
-            else if (_param[0] == "" || _param[1] == "")
+            else if (_user->_regstat != 3)
+                _user->_fd << "PART: error: user is not registered\n";
+            else if ((*_param.begin()) == "" || (*_param.begin() + 1) == "")
             {
-                _user->_fd << "KICK: error: wrong parameters\n";
+                _user->_fd << "PART: error: wrong parameters\n";
+            }
+            else
+            {
+                //look for the channels
             }
         }
 
@@ -182,11 +210,13 @@ class Parser
         {
             std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
 
-            if (_param.size() )//fill in the required number
+            if (_param.size() < 1 || _param.size() > 2)
                 _user->_fd << "TOPIC: invalid number of parameters!\n";
+            else if (_user->_regstat != 3)
+                _user->_fd << "TOPIC: error: user is not registered\n";
             else if (*(_param.begin()) == "")
             {
-                _user->_fd << "KICK: error: wrong parameter\n";
+                _user->_fd << "TOPIC: error: wrong parameter\n";
             }
             else if (it != _tree->get_channel().find(_param[0]))
             {
@@ -194,7 +224,7 @@ class Parser
                 //send a topic message to alll the members of the channel
                 for (it; it != _user->_nickname.find().end())
                 {
-                    _user->_fd << "topic of the channe is " << _tree->get_channel();
+                    _user->_fd << "topic of the channel is " << (_tree->get_channel());//fix this
                 }
             }
             else
@@ -205,12 +235,14 @@ class Parser
         void    invite()
         {
             std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
-            
-            if (_param.size() )//fill in the required number
+
+            if (_param.size() != 2)
                 _user->_fd << "INVITE: invalid number of parameters!\n";
+            else if (_user->_regstat != 3)
+                _user->_fd << "INVITE: error: user is not registered\n";
             else if (*(_param.begin()) == "" || *(_param.begin() + 1) == "")
             {
-                _user->_fd << "KICK: error: wrong parameters\n";
+                _user->_fd << "INVITE: error: wrong parameters\n";
             }
             else if (it != _tree->get_channel().end())
             {
@@ -221,7 +253,7 @@ class Parser
                 else
                 {
                     it->second.add_member(_tree->find_usr_by_nickname(_param[0]));
-                    _user->_fd << _user->_nickname << "'ve been successfully added to" << _tree->get_channel();
+                    _user->_fd << _user->_nickname << "'ve been successfully added to" << _tree->get_channel();//is it the way to have the channel name ?
                 }
             }
             else
@@ -236,6 +268,8 @@ class Parser
 
             if (_param.size() )//fill in the required number
                 _user->_fd << "KICK: invalid number of parameters!\n";
+            else if (_user->_regstat != 3)
+                _user->_fd << "KICK: error: user is not registered\n";
             else if (*(_param.begin()) == "" || *(_param.begin() + 1) == "")
             {
                 _user->_fd << "KICK: error: wrong parameters\n";
@@ -252,12 +286,15 @@ class Parser
                     _user->_fd << "KICK: error: user does not exist\n"
             }
         }
+
         void    join()
         {
             std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
-            
-            if (_param.size() )//fill in the required number
+
+            if (_param.size() < 1)
                 _user->_fd << "JOIN: invalid number of parameters!\n";
+            else if (_user->_regstat != 3)
+                _user->_fd << "JOIN: error: user is not registered\n";
             else if (*(_param.begin()) == "" || *(_param.begin() + 1) == "")
             {
                 _user->_fd << "JOIN: error: wrong parameters\n";
@@ -274,19 +311,21 @@ class Parser
                         _user->_fd << "topic of the channel is : " << _tree->get_channel();
                     }
                     //3.call the name command : name();
-                }privmsg
+                }
                 else
-                    _user->_fd << "INVITE: error: channel does not exist\n"
+                    _user->_fd << "JOIN: error: channel does not exist\n"
             }
             else
-                _user->_fd << "INVITE: error: "<< _user->_nickname << "is banned\n";
+                _user->_fd << "JOIN: error: "<< _user->_nickname << "is banned\n";
 
         }
 
         void    privmsg()
         {
-            if (_param.size() )//fill in the required number
+            if (_param.size() < 2)
                 _user->_fd << "PRIVMSG: invalid number of parameters!\n";
+            else if (_user->_regstat != 3)
+                _user->_fd << "PRIVMSG: error: user is not registered\n";
             else if (*(_param.begin()) == "" || *(_param.begin() + 1) == "")
             {
                 _user->_fd << "PRIVMSG: error: wrong parameters\n";
@@ -304,10 +343,13 @@ class Parser
                 _user->_fd << "PRIVMSG: error: impossible to send your message\n";
             }
         }
+
         void    notice()
         {
-            if (_param.size() )//fill in the required number
+            if (_param.size() < 2)
                 _user->_fd << "NOTICE: invalid number of parameters!\n";
+            else if (_user->_regstat != 3)
+                _user->_fd << "NOTICE: error: user is not registered\n";
             else if (*(_param.begin()) == "" || *(_param.begin() + 1) == "")
             {
                 _user->_fd << "NOTICE: error: wrong parameters\n";
@@ -322,7 +364,7 @@ class Parser
             }
             else
             {
-                _user->_fd << "PRIVMSG: error: impossible to send your message\n";
+                _user->_fd << "NOTICE: error: impossible to send your message\n";
             }
         }
 
