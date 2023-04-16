@@ -20,10 +20,11 @@ class User
         User(std::string nick_name, int fd): _nickname(nick_name), _fd(fd){}
         ~User();
 
-        void    erase_me_from_allchannel()
-        {//send a message to all member of the channel that the user quits
-            for (int i = 0; i < _channels.size(); ++i)
-                _channels[i]->erase_user(*this);
+        void    erase_me_from_allchannel(std::vector<Channel*>  &_chan)
+        {
+            for (int i = 0; i < _chan.size(); ++i)
+                _chan[i]->erase_user(*this);
+            _chan.clear();
         }
 
         std::string find_channel(std::string    chaname)

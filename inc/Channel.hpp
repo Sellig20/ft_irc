@@ -14,7 +14,7 @@ class Channel
          ~Channel();
 
          std::string get_name(){return (_name);}
-         std::string get_topic(){return (_topic);}
+         std::string &get_topic(){return (_topic);}
          int         size(){return (_members.size());}
 
          void    add_member(User &user)
@@ -109,6 +109,11 @@ class Channel
              return false;
          }
 
+        void    send_message_all_members(std::string _msg)
+        {
+            for (iterator_user it = _members.begin(); it != _members.end(); it++)
+                ((*it)->_wbuff).append(_msg);
+        }
 
      private:
          std::vector<User*>          _members;

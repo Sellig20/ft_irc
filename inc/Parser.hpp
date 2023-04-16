@@ -6,41 +6,33 @@
 class Parser
 {
     public:
-        Parser(Tree &tree)
+        Parser(Tree &tree, std::string password)
         {
             _tree = &tree;
             _cmd = "";
-            _user = NULL;
+            _user = NULL;//fix this
+            _pass = password;
         }
 
         ~Parser()
         {
-            delete _user;
-            delete _tree;
         }
 
         int    check_for_cmd()
         {
             std::string     buf = _user->_rbuff;
             int             pos(0);
-            char            sep;
 
-            if (buf.find_first_of('\n', 0))
-                sep = '\n';
-            else if (buf.find_first_of('\r', 0))
-                sep = '\r';
-            else
-            {
-                //it is not a full entry yet
-                return 1;
-            }
-            pos = buf.find_first_of(sep , 0);
-            buf.copy(static_cast<char*>(_user->_rbuff), pos, 0);
-            fill_in_params(buf, pos);
+            pos = buf.find("\r\n");
+            if (pos == std::string::npos)
+                return (1);
+            memmove(&(_user->_rbuff)[0], &(buf[0]), pos +1);
+            buf = buf.substr(0, pos);
+            fill_in_params(buf);
             return 0;
         }
 
-        void    fill_in_params(std::string  buf, int pos)
+        void    fill_in_params(std::string  buf)
         {
             std::string::size_type prev_pos = 0, pos = 0;
 
@@ -51,10 +43,27 @@ class Parser
                 _param.push_back(substring);
                 prev_pos = ++pos;
             }
-            _param.push_back(buf.substr(prev_pos, pos-prev_pos)); // Last word
+            _param.push_back(buf.substr(prev_pos, pos-prev_pos));
 
             _cmd = *(_param.begin());
             _param.erase(_param.begin());
+        }
+
+        std::vector<std::string>    custom_split(std::string buf)
+        {
+           std::string::size_type       prev_pos = 0, pos = 0;
+           std::vector<std::string>     res;
+
+
+            while((pos = buf.find(',' , pos)) != std::string::npos)
+            {
+                std::string substring( buf.substr(prev_pos, pos-prev_pos) );
+
+                res.push_back(substring);
+                prev_pos = ++pos;
+            }
+            res.push_back(buf.substr(prev_pos, pos-prev_pos));
+            return (res);
         }
 
         void    execute()
@@ -90,86 +99,86 @@ class Parser
             else if (_cmd.compare("NOTICE") == 0)
                 notice();
             else
-                _user->_fd << "Error: No such command\n";
-        }
-
-        void    cap()//DO WE KEEP IT ?
-        {
-            return ;//we have nothung to do here
+               (_user->_wbuff).append("Error: No such command\n");
         }
 
         void    pass()
         {
             if (_user->_regstat > 1)
-                _user->_fd << "PASS: error: user is already connected\n";
-            else if (!_cmd.compare(_pass))
+               (_user->_wbuff).append("PASS: error: user is already connected\n");
+            else if (_param.size() != 1)
+               (_user->_wbuff).append("PASS: wrong number of parameters\n");
+            else if (!(*(_param.begin())).compare(_pass))
                 _user->_regstat = 1;
             else
-                _user->_fd << "PASS: error: wrong password, try again !\n";
+               (_user->_wbuff).append("PASS: error: wrong password, try again !\n");
         }
+
         void    nick()
         {
             if (_param.size() != 1)
-                _user->_fd << "NICK: error: invalid number of parameters!\n";
+               (_user->_wbuff).append("NICK: error: invalid number of parameters!\n");
             else if (_user->_regstat != 1)
-                _user->_fd << "NICK: error: user is not registered\n";
+               (_user->_wbuff).append("NICK: error: user is not registered\n");
             else if (_tree->get_usernick().find(*(_param.begin())) != _tree->get_usernick().end())
-                _user->_fd << "NICK: error: nickname is already in use choose a different one\n";
+               (_user->_wbuff).append("NICK: error: nickname is already in use choose a different one\n");
+            else if (_tree->get_channel().find(*(_param.begin())) != _tree->get_channel().end())
+               (_user->_wbuff).append("NICK: error: nickname is already in the network\n");
             else
             {
                 _user->_regstat = 2;
-                _user->_nickname = _param.begin();
+                _user->_nickname = *(_param.begin());
             }
         }
 
         void    user()
         {
             if (_param.size() != 4)
-                _user->_fd << "USER: error; invalid number of parameters!\n";
+               (_user->_wbuff).append("USER: error; invalid number of parameters!\n");
             else if (_user->_regstat != 2)
-                _user->_fd << "USER: error: user is not registered\n";
+               (_user->_wbuff).append("USER: error: user is not registered\n");
             else
             {
                 _user->_regstat = 3;
-                _user->_username = _param.begin();
-                _user->_realname = _param.begin() + 2;
+                _user->_username = *(_param.begin());
+                _user->_realname = *(_param.begin() + 2);
             }
         }
 
         void    ping()
         {
             if (_param.size() != 1)
-                _user->_fd << "PING: error : invalid number of parameters!\n";
+               (_user->_wbuff).append("PING: error : invalid number of parameters!\n");
             else if (_user->_regstat != 3)
-                _user->_fd << "PING: error: user is not registered\n";
+               (_user->_wbuff).append("PING: error: user is not registered\n");
             else if (*(_param.begin()) == "")
             {
-                _user->_fd << "PING: error: wrong parameter\n";
+               (_user->_wbuff).append("PING: error: wrong parameter\n");
             }
             else
-                _user->_fd << "PING\n";
+               (_user->_wbuff).append("PING\n");
         }
 
         void    pong()
         {
             if (_param.size() != 1)
-                _user->_fd << "PONG: error: invalid number of parameters!\n";
+               (_user->_wbuff).append("PONG: error: invalid number of parameters!\n");
             else if (_user->_regstat != 3)
-                _user->_fd << "PONG: error: user is not registered\n";
-            else if (_param.begin() == "")
+               (_user->_wbuff).append("PONG: error: user is not registered\n");
+            else if (*(_param.begin()) == "")
             {
-                _user->_fd << "PONG: error: wrong parameter\n";
+               (_user->_wbuff).append("PONG: error: wrong parameter\n");
             }
             else
-                _user->_fd << "PONG\n";
+               (_user->_wbuff).append("PONG\n");
         }
 
-        void    oper()
+        void    oper()//incomplete ,question: what is the password and name ??
         {
             if (_param.size() != 2)
-                _user->_fd << "OPER: error: invalid number of parameters!\n";
+               (_user->_wbuff).append("OPER: error: invalid number of parameters!\n");
             else if (_user->_regstat != 3)
-                _user->_fd << "OPER: error: user is not registered\n";
+               (_user->_wbuff).append("OPER: error: user is not registered\n");
             else
             {
                 //make the user admin of the channel
@@ -179,56 +188,68 @@ class Parser
         void    quit()
         {
             if (_param.size() != 1)
-                _user->_fd << "QUIT: error: invalid number of parameters!\n";
+               (_user->_wbuff).append("QUIT: error: invalid number of parameters!\n");
             else if (_user->_regstat != 3)
-                _user->_fd << "QUIT: error: user is not registered, register first before quitting\n";
+               (_user->_wbuff).append("QUIT: error: user is not registered, register first before quitting\n");
             else
             {
-                _user->erase_me_from_allchannel();
-                _tree->erase_user(_user);
+                std::vector<Channel*>   ch_tmp = _user->_channels;
+
+                _user->erase_me_from_allchannel(_user->_channels);
+                _tree->erase_user(*_user);
+                for (int i = 0; i < ch_tmp.size(); i++)
+                    ch_tmp[i]->send_message_all_members("QUIT: " + _user->_nickname + " has left the channel " + *(_param.end() - 1));
             }
         }
 
-        //CHANNEL OPERATION
         void    part()
         {
             if (_param.size() < 2)
-                _user->_fd << "PART: invalid number of parameters!\n";
+               (_user->_wbuff).append("PART: error: invalid number of parameters!\n");
             else if (_user->_regstat != 3)
-                _user->_fd << "PART: error: user is not registered\n";
-            else if ((*_param.begin()) == "" || (*_param.begin() + 1) == "")
-            {
-                _user->_fd << "PART: error: wrong parameters\n";
-            }
+               (_user->_wbuff).append("PART: error: user is not registered\n");
+            else if (*(_param.begin()) == "" || *(_param.begin() + 1) == "")
+               (_user->_wbuff).append("PART: error: wrong parameters\n");
             else
             {
-                //look for the channels
+                std::vector<std::string>    params = custom_split(*(_param.begin()));
+
+                for (int i = 0; i < params.size(); i++)
+                {
+                    std::map<std::string, Channel>::iterator    it = _tree->get_channel().find(*(params.begin() + i));
+
+                    if (it == _tree->get_channel().end())
+                       (_user->_wbuff).append("PART: error: channel " + *(params.begin() + i) + " does not exist\n");
+                    else if (!it->second.is_member(_user->_nickname))
+                       (_user->_wbuff).append("PART: error: user is not in the channel\n");
+                    else
+                    {
+                        it->second.erase_members(*_user);
+                        it->second.send_message_all_members("PART: " + _user->_nickname + " has left the channel " + *(_param.end() - 1));
+                    }
+                }
             }
         }
 
         void    topic()
         {
-            std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
+            std::map<std::string, Channel>::iterator it = _tree->get_channel().find(*(_param.begin()));
 
             if (_param.size() < 1 || _param.size() > 2)
-                _user->_fd << "TOPIC: invalid number of parameters!\n";
+               (_user->_wbuff).append("TOPIC: invalid number of parameters!\n");
             else if (_user->_regstat != 3)
-                _user->_fd << "TOPIC: error: user is not registered\n";
+               (_user->_wbuff).append("TOPIC: error: user is not registered\n");
             else if (*(_param.begin()) == "")
             {
-                _user->_fd << "TOPIC: error: wrong parameter\n";
+               (_user->_wbuff).append("TOPIC: error: wrong parameter\n");
             }
-            else if (it != _tree->get_channel().find(_param[0]))
+            else if (it != _tree->get_channel().end())
             {
-                it->second.get_topic() = _param[1];
-                //send a topic message to alll the members of the channel
-                for (it; it != _user->_nickname.find().end())
-                {
-                    _user->_fd << "topic of the channel is " << (_tree->get_channel());//fix this
-                }
+                it->second.get_topic() = *(_param.begin() + 1);
+                it->second.send_message_all_members("TOPIC: the topic of the channels has been changed to " + *(_param.begin() + 1));
             }
             else
-                _user->_fd << "TOPIC: error: channel does not exist\n";
+               (_user->_wbuff).append("TOPIC: error: channel does not exist\n");
 
         }
 
@@ -237,27 +258,27 @@ class Parser
             std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
 
             if (_param.size() != 2)
-                _user->_fd << "INVITE: invalid number of parameters!\n";
+               (_user->_wbuff).append("INVITE: invalid number of parameters!\n");
             else if (_user->_regstat != 3)
-                _user->_fd << "INVITE: error: user is not registered\n";
+               (_user->_wbuff).append("INVITE: error: user is not registered\n");
             else if (*(_param.begin()) == "" || *(_param.begin() + 1) == "")
             {
-                _user->_fd << "INVITE: error: wrong parameters\n";
+               (_user->_wbuff).append("INVITE: error: wrong parameters\n");
             }
             else if (it != _tree->get_channel().end())
             {
                 if (it->second.size() < 1)
-                    (*_user)._wbuff.append("INVITE: error: empty channel\n");
+                    (_user->_wbuff).append("INVITE: error: empty channel\n");
                 else if (it->second.is_member(_param[0]))
-                    _user->_fd << "INVITE: error: you are already in the channel !\n";
+                   (_user->_wbuff).append("INVITE: error: you are already in the channel !\n");
                 else
                 {
-                    it->second.add_member(_tree->find_usr_by_nickname(_param[0]));
-                    _user->_fd << _user->_nickname << "'ve been successfully added to" << _tree->get_channel();//is it the way to have the channel name ?
+                    it->second.add_member(*(_tree->find_usr_by_nickname(*(_param.begin()))));
+                   (_user->_wbuff).append(_user->_nickname + " has been successfully added to " + *(_param.begin() + 1));
                 }
             }
             else
-                _user->_fd << "INVITE: error: channel does not exist\n"
+               (_user->_wbuff).append("INVITE: error: channel does not exist\n");
         }
 
         void    kick()
@@ -266,112 +287,119 @@ class Parser
             std::string userToKick;
             std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
 
-            if (_param.size() )//fill in the required number
-                _user->_fd << "KICK: invalid number of parameters!\n";
+            if (_param.size() < 2)//double check later
+               (_user->_wbuff).append("KICK: invalid number of parameters!\n");
             else if (_user->_regstat != 3)
-                _user->_fd << "KICK: error: user is not registered\n";
+               (_user->_wbuff).append("KICK: error: user is not registered\n");
             else if (*(_param.begin()) == "" || *(_param.begin() + 1) == "")
             {
-                _user->_fd << "KICK: error: wrong parameters\n";
+               (_user->_wbuff).append("KICK: error: wrong parameters\n");
             }
             else if (it == _tree->get_channel().end())
-                _user->_fd << "KICK: error: channel does not exist\n";
+               (_user->_wbuff).append("KICK: error: channel does not exist\n");
             else if (it != _tree->get_channel().end())
             {
                 if (it->second.is_member(_param[1]))
-                    it->second.erase_user(_tree->find_usr_by_nickname(_param[1]));
-                else if (it->second.is_oper(_param[1]))
-                    _user->_fd << "User cannot be kicked because he is an administrator !";
+                    it->second.erase_user(*(_tree->find_usr_by_nickname(*(_param.begin() + 1))));
+                else if (it->second.is_oper(*(_param.begin() + 1)))
+                   (_user->_wbuff).append("User cannot be kicked because he is an administrator !");
                 else
-                    _user->_fd << "KICK: error: user does not exist\n"
+                   (_user->_wbuff).append("KICK: error: user does not exist\n");
             }
         }
 
-        void    join()
+        void    join()//incomplete, //check parsing ?
         {
             std::map<std::string, Channel>::iterator it = _tree->get_channel().find(_param[0]);
 
             if (_param.size() < 1)
-                _user->_fd << "JOIN: invalid number of parameters!\n";
+               (_user->_wbuff).append("JOIN: invalid number of parameters!\n");
             else if (_user->_regstat != 3)
-                _user->_fd << "JOIN: error: user is not registered\n";
+               (_user->_wbuff).append("JOIN: error: user is not registered\n");
             else if (*(_param.begin()) == "" || *(_param.begin() + 1) == "")
             {
-                _user->_fd << "JOIN: error: wrong parameters\n";
+               (_user->_wbuff).append("JOIN: error: wrong parameters\n");
             }
             else if (it != _tree->get_channel().end())
             {
                 if (!it->second.is_ban(_user->_nickname))
                 {
                     //discuss what we need to do with the keys
-                    it->second.add_member(*_user);//??ask aguillar
-                    _user->_fd << "you've joined the channel " << _tree->get_channel();
+                    it->second.add_member(*_user);
+                   (_user->_wbuff).append("JOIN: you've joined the channel " + it->second.get_name());
                     if (it->second.get_topic() != "")
-                    {
-                        _user->_fd << "topic of the channel is : " << _tree->get_channel();
-                    }
-                    //3.call the name command : name();
+                       (_user->_wbuff).append("JOIN: topic of the channel is : " + it->second.get_topic());
+                    //(_user->wbuff).append() send a list of users of the channel to the user
                 }
                 else
-                    _user->_fd << "JOIN: error: channel does not exist\n"
+                   (_user->_wbuff).append("JOIN: error: channel does not exist\n");
             }
             else
-                _user->_fd << "JOIN: error: "<< _user->_nickname << "is banned\n";
+               (_user->_wbuff).append("JOIN: error: " +  _user->_nickname + "is banned\n");
 
         }
 
         void    privmsg()
         {
             if (_param.size() < 2)
-                _user->_fd << "PRIVMSG: invalid number of parameters!\n";
+               (_user->_wbuff).append("PRIVMSG: invalid number of parameters!\n");
             else if (_user->_regstat != 3)
-                _user->_fd << "PRIVMSG: error: user is not registered\n";
+               (_user->_wbuff).append("PRIVMSG: error: user is not registered\n");
             else if (*(_param.begin()) == "" || *(_param.begin() + 1) == "")
             {
-                _user->_fd << "PRIVMSG: error: wrong parameters\n";
-            }
-            else if (_tree->get_channel().find(_param[0]) != _tree->get_channel().end())
-            {
-                //send msg to channel //check if the sender/user has permission to write in THAT channel, if not ERROR CANNOT SENDTO CHAN
-            }
-            else if ((*_param.begin()).compare(_user->_nickname) == 0)
-            {
-                //send msg to the user
+               (_user->_wbuff).append("PRIVMSG: error: wrong parameters\n");
             }
             else
             {
-                _user->_fd << "PRIVMSG: error: impossible to send your message\n";
+                std::vector<std::string>    targets = custom_split(*(_param.begin()));
+
+                for (int i = 0; i < targets.size(); i++)
+                {
+                    User* tmp =_tree->find_usr_by_nickname(*(targets.begin() + i));
+                    if (tmp)
+                    (tmp->_wbuff).append(*(_param.begin() + 1));
+                    else
+                    {
+                        std::map<std::string, Channel>::iterator tmp2 = _tree->find_channel(*(targets.begin() + i));
+                        if (tmp2 != _tree->get_channel().end())
+                            (tmp2->second.send_message_all_members(*(_param.begin() + 1)));
+                        else
+                            (_user->_wbuff).append("PRIVMSG: error: no such target\n");
+                    }
+                }
+                //send msg to channel //check if the sender/user has permission to write in THAT channel, if not ERROR CANNOT SENDTO CHAN
             }
         }
 
         void    notice()
         {
             if (_param.size() < 2)
-                _user->_fd << "NOTICE: invalid number of parameters!\n";
+               (_user->_wbuff).append("NOTICE: invalid number of parameters!\n");
             else if (_user->_regstat != 3)
-                _user->_fd << "NOTICE: error: user is not registered\n";
+               (_user->_wbuff).append("NOTICE: error: user is not registered\n");
             else if (*(_param.begin()) == "" || *(_param.begin() + 1) == "")
             {
-                _user->_fd << "NOTICE: error: wrong parameters\n";
-            }
-            else if (_tree->get_channel().find(_param[0]) != _tree->get_channel().end())
-            {
-                //send msg to channel //check if the sender/user has permission to write in THAT channel, if not ERROR CANNOT SENDTO CHAN
-            }
-            else if (_param[0].compare(_user->_nickname) == 0)
-            {
-                //send msg to the user
+               (_user->_wbuff).append("NOTICE: error: wrong parameters\n");
             }
             else
             {
-                _user->_fd << "NOTICE: error: impossible to send your message\n";
+                std::vector<std::string>    targets = custom_split(*(_param.begin()));
+
+                for (int i = 0; i < targets.size(); i++)
+                {
+                    User* tmp =_tree->find_usr_by_nickname(*(targets.begin() + i));
+                    if (tmp)
+                        (tmp->_wbuff).append(*(_param.begin() + 1));
+                    else
+                        (_user->_wbuff).append("PRIVMSG: error: no such user\n");
+                }
             }
         }
 
 
     private:
         std::string                  _cmd;
-        std::vector<std::string>     _param;//changed this to a vector?
+        std::vector<std::string>     _param;
         User                        *_user;
         Tree                        *_tree;
         std::string                 _pass;//discuss late
